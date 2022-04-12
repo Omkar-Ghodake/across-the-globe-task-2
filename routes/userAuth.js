@@ -1,8 +1,14 @@
 const express = require('express')
 const router = express.Router()
 const User = require('../models/user')
-const { body, validationResult } = require('express-validator')
+const { body, param, validationResult } = require('express-validator')
 const bcrypt = require('bcrypt')
+const jwt = require('jsonwebtoken')
+const verifyLoggedInUser = require('../middleware/verifyLoggedInUser')
+require('dotenv').config()
+
+// environment variables
+const jwtSecret = process.env.JWT_SECRET
 
 // create a user
 router.post('/create-user',
@@ -50,9 +56,75 @@ router.post('/create-user',
 
 // user login
 router.post('/login',
-[
-	body('')
-]
+	[
+		body('username', 'Username should contain at least 4 characters').isLength({ min: 4 }),
+		body('password', 'Password should container at least 8 characters').isLength({ min: 8 })
+	],
+	async (req, res) => {
+		let success = false
+
+		const errors = validationResult(req)
+		if (!errors.isEmpty()) {
+			res.status(400).json({ success, errors })
+		} else {
+			try {
+				const { username, password } = req.body
+
+				const user = await User.findOne({ username })
+				if (!user) {
+					success = false
+					res.status(400).json({ success, error: 'Username not found' })
+				} else {
+					const passwordCompare = await bcrypt.compare(password, user.password)
+					if (!passwordCompare) {
+						success = false
+						res.status(400).json({ success, error: 'Invalid Password' })
+					} else {
+						const payload = {
+							user: {
+								id: user.id
+							}
+						}
+
+						const authToken = jwt.sign(payload, jwtSecret)
+
+						success = true
+						res.json({ success, authToken })
+					}
+				}
+			} catch (error) {
+				success = false
+				res.status(500).json({ success, error })
+			}
+		}
+	}
+)
+
+// get user data
+router.get('/get-user/:userId',
+	verifyLoggedInUser,
+	[
+		param('id', 'Invalid User Id').exists()
+	],
+	async (req, res) => {
+		let success = false
+
+		try {
+			const { userId } = req.params
+			const userData = await User.findById(userId).select('-password')
+			if (userData) {
+				success = true
+				res.json({ success, userData })
+			} else {
+				success = false
+				res.status(400).json({ success, error: 'User not found' })
+			}
+
+		} catch (error) {
+			success = false
+			res.status(500).json({ success, error })
+		}
+	}
 )
 
 module.exports = router

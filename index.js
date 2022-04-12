@@ -13,6 +13,7 @@ app.use(bodyParser.json())
 app.use(express.json())
 
 app.use('/', require('./routes/userAuth'))
+app.use('/reset-password', require('./routes/passwordReset'))
 
 app.listen(port, () => {
 	console.log(`App running on http://localhost:${port}`)
